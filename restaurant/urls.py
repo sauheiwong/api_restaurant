@@ -21,6 +21,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
     path('api/', include('djoser.urls')),
-    # path('api/', include('api.urls')),
+    path('api/', include('api_endpoint.urls')),
     path('', include('djoser.urls.authtoken')),
 ]
