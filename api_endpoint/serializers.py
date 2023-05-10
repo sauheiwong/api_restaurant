@@ -8,10 +8,19 @@ class RestaurantSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'location']
 
 class TableSerializer(serializers.ModelSerializer):
-    # restaurant = serializers.PrimaryKeyRelatedField(
-	# 		queryset=Restaurant.objects.all(), many=False
-	# )
-    # restaurant = RestaurantSerializer()
     class Meta:
         model = Table
-        fields = ['id', 'max_no', 'restaurant']
+        fields = '__all__'
+
+class TypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Type
+        fields = '__all__'
+
+class FoodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Food
+        fields = '__all__'
+        extra_kwargs = {
+            'ave_point': {'read_only': True},
+        }

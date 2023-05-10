@@ -8,4 +8,10 @@ urlpatterns = [
 
     path('table', views.TableView.as_view()),
     path('table/<int:pk>', views.SingleTableView.as_view()),
+
+    path('type', views.TypeView.as_view()),
+    path('type/<int:pk>', views.SingleTypeView.as_view()),
+
+    path('food', views.FoodView.as_view()),
+    path('food/<int:pk>', views.SingleFoodView.as_view()),
 ]
