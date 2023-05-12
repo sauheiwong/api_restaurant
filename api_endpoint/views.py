@@ -45,13 +45,16 @@ class TableView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Table.objects.filter(available=True)
+        queryset = Table.objects.all()
         max_no_query = self.request.query_params.get('max_no', None)
         restaurant_query = self.request.query_params.get('restaurant_id', None)
+        location_query = self.request.query_params.get('location', None)
         if max_no_query:
             queryset = queryset.filter(max_no__gte=int(max_no_query))
         if restaurant_query:
             queryset = queryset.filter(restaurant_id=restaurant_query)
+        if location_query:
+            queryset = queryset.filter(restaurant__location__icontains=location_query)
         return queryset
 
     def create(self, request, *args, **kwargs):
@@ -135,3 +138,33 @@ class SingleFoodView(generics.RetrieveUpdateDestroyAPIView):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can edit Foods.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
+
+class OrderFoodView(APIView):
+
+    def get(self, request):
+        order_id = request.query_params.get('order_id', None)
+        if order_id:
+            try:
+                order = Order.objects.get(id=int(order_id))
+            except Order.DoesNotExist:
+                return Response({'error': 'order id does not exist. '}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': 'order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        food_id = request.query_params.get('name', None)
+        number = int(request.query_params.get('number', 1))
+        if food_id:
+            order_food, created = OrderFood.objects.get_or_create(food_id=food_id, number=number)
+        else:
+            return Response({'error': 'food id missed'}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+
+class OrderLView(generics.ListAPIView):
+    serializer_class = Order
+
+class OrderView(APIView):
+
+    def get(self, request):
+        return
