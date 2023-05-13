@@ -53,12 +53,12 @@ class OrderFood(models.Model):
 
 class Order(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user')
-    table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='table')
-    ordered_food = models.ManyToManyField(OrderFood, related_name='ordered_food')
-    no_of_people = models.SmallIntegerField()
+    table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='table', null=True, blank=True)
+    ordered_food = models.ManyToManyField(OrderFood, related_name='ordered_food', blank=True)
+    no_of_people = models.SmallIntegerField(default=1)
     complete = models.BooleanField(default=False)
-    total_price = models.DecimalField(decimal_places=2, max_digits=71)
+    total_price = models.DecimalField(decimal_places=2, max_digits=7, default=0)
 
     def __str__(self) -> str:
-        return self.table+' with '+str(self.no_of_people)+' '+self.total_price
+        return str(self.no_of_people)+' '+str(self.total_price) #str(self.table.restaurant.name)+' with '+
 

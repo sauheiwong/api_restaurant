@@ -139,32 +139,57 @@ class SingleFoodView(generics.RetrieveUpdateDestroyAPIView):
             return Response({'error': 'Only superuser can edit Foods.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
 
+class OrderView(generics.ListCreateAPIView):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can view all orders.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return 
+
+class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user = self.get_object().user
+        if request.user != user:
+            return Response({'error': 'Only superuser can view orders.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().get(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can delete orders.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
+    
+    def put(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can update orders.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().put(request, *args, **kwargs)
+
 class OrderFoodView(APIView):
+    queryset = Order.objects.all()
 
     def get(self, request):
-        order_id = request.query_params.get('order_id', None)
-        if order_id:
-            try:
-                order = Order.objects.get(id=int(order_id))
-            except Order.DoesNotExist:
-                return Response({'error': 'order id does not exist. '}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            return Response({'error': 'order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        food_id = request.query_params.get('name', None)
-        number = int(request.query_params.get('number', 1))
+        food_id = request.data.get('name', None)
+        number = int(request.data.get('number', 1))
+        no_of_people = int(request.data.get('no_of_people', 1))
+        order, created = Order.objects.get_or_create(
+            user=request.user,
+            no_of_people=no_of_people,
+            complete=False
+            )
         if food_id:
             order_food, created = OrderFood.objects.get_or_create(food_id=food_id, number=number)
-        else:
-            return Response({'error': 'food id missed'}, status=status.HTTP_400_BAD_REQUEST)
+            order.ordered_food.add(order_food)
+        serializer = OrderSerializer(order)
+        return Response({'order': serializer.data}, status=status.HTTP_200_OK)
         
-
-
-
-class OrderLView(generics.ListAPIView):
-    serializer_class = Order
-
-class OrderView(APIView):
-
-    def get(self, request):
-        return
+    def post(self, request):
+        return 
