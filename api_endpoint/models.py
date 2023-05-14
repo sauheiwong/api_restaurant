@@ -46,7 +46,6 @@ class Unavailable(models.Model):
 class OrderFood(models.Model):
     food = models.ForeignKey(Food, on_delete=models.CASCADE, related_name='ordered_food')
     no = models.SmallIntegerField()
-    price = models.DecimalField(decimal_places=2, max_digits=5)
 
     def __str__(self) -> str:
         return str(self.no)+' '+self.food.english_name
@@ -58,7 +57,9 @@ class Order(models.Model):
     no_of_people = models.SmallIntegerField(default=1)
     complete = models.BooleanField(default=False)
     total_price = models.DecimalField(decimal_places=2, max_digits=7, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return str(self.no_of_people)+' '+str(self.total_price) #str(self.table.restaurant.name)+' with '+
+        return str(self.table.restaurant.name)+' with '+str(self.no_of_people)+' '+str(self.total_price) #
 

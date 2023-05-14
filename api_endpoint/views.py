@@ -45,10 +45,11 @@ class TableView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Table.objects.all()
-        max_no_query = self.request.query_params.get('max_no', None)
-        restaurant_query = self.request.query_params.get('restaurant_id', None)
-        location_query = self.request.query_params.get('location', None)
+        max_no_query = self.request.data.get('max_no', None)
+        restaurant_query = self.request.data.get('restaurant_id', None)
+        location_query = self.request.data.get('location', None)
+        available = self.request.data.get('available', True)
+        queryset = Table.objects.filter(available=available)
         if max_no_query:
             queryset = queryset.filter(max_no__gte=int(max_no_query))
         if restaurant_query:
@@ -150,7 +151,23 @@ class OrderView(generics.ListCreateAPIView):
         return super().list(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        return 
+        table, no_of_people = int(request.data.get('table_id', None)), int(request.data.get('no_of_people', 1))
+        if not table:
+            return Response({'error': 'Table id miss'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            table = Table.objects.get(id=table)
+            if no_of_people > table.max_no:
+                return Response({'error': f'The max. load of this table ({table.max_no}) is smaller than {no_of_people}.'}, status=status.HTTP_404_NOT_FOUND)
+            table.available = False
+            table.save()
+        except Table.DoesNotExist:
+            return Response({'error': 'Table id does not exist'}, status=status.HTTP_404_NOT_FOUND)
+        order = Order.objects.create(
+            user=request.user,
+            table=table,
+            no_of_people=no_of_people,
+        )
+        return Response({'order': OrderSerializer(order).data}, status=status.HTTP_201_CREATED)
 
 class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.all()
@@ -158,8 +175,8 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        user = self.get_object().user
-        if request.user != user:
+        order = self.get_object()
+        if request.user != order.user and not request.user.is_superuser:
             return Response({'error': 'Only superuser can view orders.'}, status=status.HTTP_403_FORBIDDEN)
         return super().get(request, *args, **kwargs)
 
@@ -175,21 +192,46 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
 
 class OrderFoodView(APIView):
     queryset = Order.objects.all()
+    permission_classes = []
 
-    def get(self, request):
-        food_id = request.data.get('name', None)
-        number = int(request.data.get('number', 1))
-        no_of_people = int(request.data.get('no_of_people', 1))
-        order, created = Order.objects.get_or_create(
-            user=request.user,
-            no_of_people=no_of_people,
-            complete=False
-            )
-        if food_id:
-            order_food, created = OrderFood.objects.get_or_create(food_id=food_id, number=number)
-            order.ordered_food.add(order_food)
-        serializer = OrderSerializer(order)
-        return Response({'order': serializer.data}, status=status.HTTP_200_OK)
+    # def get(self, request):
+    #     order_id = request.data.get('order_id', None)
+    #     if not order_id:
+    #         return Response({'error': 'Order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
+    #     try:
+    #         order = Order.objects.get(id=int(order_id))
+    #     except Order.DoesNotExist:
+    #         return Response({'error': 'Order does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+    #     if order.user != request.user and not request.user.is_superuser:
+    #         return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
+        
+    #     return
         
     def post(self, request):
-        return 
+        food_id = request.data.get('food_id', None)
+        number = int(request.data.get('number', 1))
+        order_id = request.data.get('order_id', None)
+        if not order_id:
+            return Response({'error': 'Order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            order = Order.objects.get(id=int(order_id))
+        except Order.DoesNotExist:
+            return Response({'error': 'Order does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        if order.user != request.user:
+            return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
+        if not food_id:
+            return Response({'error': 'food id miss.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            food = Food.objects.get(id=int(food_id))
+        except Food.DoesNotExist:
+            return Response({'error': f'Food id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        order_food, created = OrderFood.objects.get_or_create(food=food, no=number)
+        order.ordered_food.add(order_food)
+        total = 0
+        for order_food in order.ordered_food.all():
+            food_price = order_food.food.price
+            no = order_food.no
+            total += food_price*no
+        order.total_price = total
+        order.save()
+        return Response({'ordered_food': OrderFoodSerializer(order_food).data, 'message': 'success'}, status=status.HTTP_201_CREATED)

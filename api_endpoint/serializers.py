@@ -54,7 +54,18 @@ class OrderFoodSerializer(serializers.ModelSerializer):
     food = FoodSerializer()
     class Meta:
         model = OrderFood
-        exclude = ['price']
+        fields = '__all__'
+
+class FoodByOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Food
+        exclude = ['type']
+
+class OrderFoodByOrderSerializer(serializers.ModelSerializer):
+    food = FoodByOrderSerializer()
+    class Meta:
+        model = OrderFood
+        fields = '__all__'
 
 class OrderSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(
@@ -62,7 +73,7 @@ class OrderSerializer(serializers.ModelSerializer):
 			default=serializers.CurrentUserDefault()
 	)
     table = TableSerializer()
-
+    ordered_food = OrderFoodByOrderSerializer(many=True)
     class Meta:
         model = Order
         fields = '__all__'
