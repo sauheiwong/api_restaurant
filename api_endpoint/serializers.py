@@ -50,22 +50,10 @@ class FoodSerializer(serializers.ModelSerializer):
             'ave_point': {'read_only': True},
         }
 
-class OrderFoodSerializer(serializers.ModelSerializer):
-    food = FoodSerializer()
-    class Meta:
-        model = OrderFood
-        fields = '__all__'
-
 class FoodByOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Food
         exclude = ['type']
-
-class OrderFoodByOrderSerializer(serializers.ModelSerializer):
-    food = FoodByOrderSerializer()
-    class Meta:
-        model = OrderFood
-        fields = '__all__'
 
 class OrderSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(
@@ -73,7 +61,12 @@ class OrderSerializer(serializers.ModelSerializer):
 			default=serializers.CurrentUserDefault()
 	)
     table = TableSerializer()
-    ordered_food = OrderFoodByOrderSerializer(many=True)
     class Meta:
         model = Order
+        fields = '__all__'
+
+class CommentSerializer(serializers.ModelSerializer):
+    food = FoodByOrderSerializer()
+    class Meta:
+        model = Comment
         fields = '__all__'

@@ -17,8 +17,8 @@ class RestaurantView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = Restaurant.objects.all()
-        name_query = self.request.query_params.get('name', None)
-        location_query = self.request.query_params.get('location', None)
+        name_query = self.request.data.get('name', None)
+        location_query = self.request.data.get('location', None)
         if name_query:
             queryset = queryset.filter(name__icontains=name_query)
         if location_query:
@@ -79,7 +79,7 @@ class TypeView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = Type.objects.all()
-        search_query = self.request.query_params.get('search', None)
+        search_query = self.request.data.get('search', None)
         if search_query:
             queryset = queryset.filter(Q(chinese_name__icontains=search_query)|Q(english_name__icontains=search_query))
         return queryset
@@ -105,12 +105,12 @@ class FoodView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = Food.objects.all()
-        name_query = self.request.query_params.get('name', None)
-        price_lte = self.request.query_params.get('price_lte', None)
-        price_gte = self.request.query_params.get('price_gte', None)
-        point_lte = self.request.query_params.get('point_lte', None)
-        point_gte = self.request.query_params.get('point_gte', None)
-        type_id = self.request.query_params.get('type_id', None)
+        name_query = self.request.data.get('name', None)
+        price_lte = self.request.data.get('price_lte', None)
+        price_gte = self.request.data.get('price_gte', None)
+        point_lte = self.request.data.get('point_lte', None)
+        point_gte = self.request.data.get('point_gte', None)
+        type_id = self.request.data.get('type_id', None)
         if name_query:
             queryset = queryset.filter(Q(chinese_name__icontains=name_query)|Q(english_name__icontains=name_query))
         if price_gte:
@@ -139,6 +139,11 @@ class SingleFoodView(generics.RetrieveUpdateDestroyAPIView):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can edit Foods.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
+    
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can edit Foods.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
 
 class OrderView(generics.ListCreateAPIView):
     queryset = Order.objects.all()
@@ -151,13 +156,15 @@ class OrderView(generics.ListCreateAPIView):
         return super().list(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        table, no_of_people = int(request.data.get('table_id', None)), int(request.data.get('no_of_people', 1))
+        table, no_of_people = request.data.get('table_id', None), int(request.data.get('no_of_people', 1))
         if not table:
             return Response({'error': 'Table id miss'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            table = Table.objects.get(id=table)
+            table = Table.objects.get(id=int(table))
             if no_of_people > table.max_no:
                 return Response({'error': f'The max. load of this table ({table.max_no}) is smaller than {no_of_people}.'}, status=status.HTTP_404_NOT_FOUND)
+            if not table.available:
+                return Response({'error': f'This table is not available now. Please choice other table.'}, status=status.HTTP_403_FORBIDDEN)
             table.available = False
             table.save()
         except Table.DoesNotExist:
@@ -178,7 +185,21 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
         order = self.get_object()
         if request.user != order.user and not request.user.is_superuser:
             return Response({'error': 'Only superuser can view orders.'}, status=status.HTTP_403_FORBIDDEN)
-        return super().get(request, *args, **kwargs)
+        ordered_food = []
+        for food in order.get_ordered_food():
+            food_infor = Food.objects.get(id=food['id'])
+            ordered_food.append(
+                {
+                    'chinese_name': food_infor.chinese_name,
+                    'english_name': food_infor.english_name,
+                    'number': food['number']
+                }
+            )
+        data = {
+            'order': OrderSerializer(order).data,
+            'ordered_food': ordered_food
+        }
+        return Response(data, status=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
         if not request.user.is_superuser:
@@ -188,24 +209,17 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
     def put(self, request, *args, **kwargs):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can update orders.'}, status=status.HTTP_403_FORBIDDEN)
-        return super().put(request, *args, **kwargs)
+        complete = request.data.get('complete', False)
+        if not complete:
+            return Response({'message': 'Order still lives.'}, status=status.HTTP_200_OK)
+        order = self.get_object()
+        order.complete = True
+        order.save()
+        return Response({'message': f'Order is completed. Total price is ${order.total_price}'}, status=status.HTTP_200_OK)
 
 class OrderFoodView(APIView):
     queryset = Order.objects.all()
     permission_classes = []
-
-    # def get(self, request):
-    #     order_id = request.data.get('order_id', None)
-    #     if not order_id:
-    #         return Response({'error': 'Order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
-    #     try:
-    #         order = Order.objects.get(id=int(order_id))
-    #     except Order.DoesNotExist:
-    #         return Response({'error': 'Order does not exist.'}, status=status.HTTP_404_NOT_FOUND)
-    #     if order.user != request.user and not request.user.is_superuser:
-    #         return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
-        
-    #     return
         
     def post(self, request):
         food_id = request.data.get('food_id', None)
@@ -219,19 +233,83 @@ class OrderFoodView(APIView):
             return Response({'error': 'Order does not exist.'}, status=status.HTTP_404_NOT_FOUND)
         if order.user != request.user:
             return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
+        if order.complete:
+            return Response({'error': 'This order has been paid. Please create a new order.'}, status=status.HTTP_400_BAD_REQUEST)
         if not food_id:
             return Response({'error': 'food id miss.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             food = Food.objects.get(id=int(food_id))
         except Food.DoesNotExist:
             return Response({'error': f'Food id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
-        order_food, created = OrderFood.objects.get_or_create(food=food, no=number)
-        order.ordered_food.add(order_food)
-        total = 0
-        for order_food in order.ordered_food.all():
-            food_price = order_food.food.price
-            no = order_food.no
-            total += food_price*no
-        order.total_price = total
+        ordered_food = order.get_ordered_food()
+        ordered_food.append(
+            {
+                'id': food.id,
+                'number': number
+            }
+        )
+        order.set_ordered_list(ordered_food)
+        order.total_price += food.price*number
         order.save()
-        return Response({'ordered_food': OrderFoodSerializer(order_food).data, 'message': 'success'}, status=status.HTTP_201_CREATED)
+        return Response({'message': 'success', 'ordered_food': FoodSerializer(food).data, 'number': number}, status=status.HTTP_202_ACCEPTED)
+
+class CommentView(generics.ListCreateAPIView):
+    serializer_class = CommentSerializer
+    permission_classes = []
+
+    def get_queryset(self):
+        queryset = Comment.objects.all()
+        food_name = self.request.data.get('food_name', None)
+        give_point = self.request.data.get('give_point', None)
+        user = self.request.data.get('user', None)
+        restaurant_id = self.request.data.get('restaurant_id', None)
+        if food_name:
+            queryset = queryset.filter(Q(ate__chinese_name__icontains=food_name)|Q(ate__english_name__icontains=food_name))
+        if give_point:
+            queryset = queryset.filter(give_point__gte=float(give_point))
+        if restaurant_id:
+            try:
+                restaurant = Restaurant.objects.get(id=int(restaurant_id))
+            except Restaurant.DoesNotExist:
+                return Response({'error': f'Restaurant with id {restaurant_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            queryset = queryset.filter(Restaurant=restaurant)
+        return queryset
+    
+    def create(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Please login in first.'}, status=status.HTTP_403_FORBIDDEN)
+        food_id = self.request.data.get('food_id', None)
+        give_point = self.request.data.get('give_point', None)
+        restaurant_id = self.request.data.get('restaurant_id', None)
+        comment = self.request.data.get('comment', None)
+        if not food_id:
+            return Response({'error': 'Food id required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not restaurant_id:
+            return Response({'error': 'Restaurant id required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not give_point:
+            return Response({'error': 'Point required.'}, status=status.HTTP_400_BAD_REQUEST)
+        give_point = float(give_point)
+        if give_point < 0 or give_point > 5:
+            return Response({'error': 'Point must be between 0 to 5'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            restaurant = Restaurant.objects.get(id=int(restaurant_id))
+        except Restaurant.DoesNotExist:
+            return Response({'error': f'Restaurant with id {restaurant_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            food = Food.objects.get(id=int(food_id))
+        except Food.DoesNotExist:
+            return Response({'error': f'Food with id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        comment = Comment.objects.create(
+            user = request.user,
+            food = food,
+            Restaurant = restaurant,
+            comment = comment,
+            give_point = give_point
+        )
+        no_of_comment = food.no_of_comment
+        food.ave_point = (float(food.ave_point)*no_of_comment + give_point)/(no_of_comment+1)
+        food.no_of_comment = no_of_comment + 1
+        food.save()
+        return Response({'comment': CommentSerializer(comment).data, 'message': 'success'}, status=status.HTTP_201_CREATED)
+        
+        

@@ -19,4 +19,6 @@ urlpatterns = [
     path('order/<int:pk>', views.SingleOrderView.as_view()),
 
     path('order-food', views.OrderFoodView.as_view()),
+
+    path('comment', views.CommentView.as_view()),
 ]
