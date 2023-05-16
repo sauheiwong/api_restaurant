@@ -69,7 +69,7 @@ class Order(models.Model):
 
 class Comment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='writer')
-    Restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='place')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='place')
     food = models.ForeignKey(Food, on_delete=models.CASCADE, related_name='ate')
     comment = models.TextField(max_length=4192, null=True, blank=True)
     give_point = models.DecimalField(decimal_places=1, max_digits=2)

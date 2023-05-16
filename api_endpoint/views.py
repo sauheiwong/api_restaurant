@@ -314,6 +314,8 @@ class OrderFoodView(APIView):
             return Response({'error': f'Food id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
         except ValueError:
             return Response({'error': f'Food id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        if Unavailable.objects.filter(food=food, restaurant=order.table.restaurant).exists():
+            return Response({'error': f'Sorry, {food.chinese_name}/{food.english_name} is not available in {order.table.restaurant.name} now.'}, status=status.HTTP_404_NOT_FOUND)
         ordered_food = order.get_ordered_food()
         ordered_food.append(
             {
@@ -330,23 +332,42 @@ class CommentView(generics.ListCreateAPIView):
     serializer_class = CommentSerializer
     permission_classes = []
 
-    def get_queryset(self):
+    def list(self, request):
         queryset = Comment.objects.all()
-        food_name = self.request.data.get('food_name', None)
-        give_point = self.request.data.get('give_point', None)
-        user = self.request.data.get('user', None)
-        restaurant_id = self.request.data.get('restaurant_id', None)
+        food_name = request.data.get('food_name', None)
+        give_point_gte = request.data.get('give_point_gte', None)
+        give_point_lte = request.data.get('give_point_lte', None)
+        user_id = request.data.get('user_id', None)
+        restaurant_id = request.data.get('restaurant_id', None)
         if food_name:
-            queryset = queryset.filter(Q(ate__chinese_name__icontains=food_name)|Q(ate__english_name__icontains=food_name))
-        if give_point:
-            queryset = queryset.filter(give_point__gte=float(give_point))
+            queryset = queryset.filter(Q(food__chinese_name__icontains=food_name)|Q(food__english_name__icontains=food_name))
+        if give_point_gte:
+            try:
+                queryset = queryset.filter(give_point__gte=float(give_point_gte))
+            except ValueError:
+                return Response({'error': 'give_point must be float'}, status=status.HTTP_400_BAD_REQUEST)
+        if give_point_lte:
+            try:
+                queryset = queryset.filter(give_point__lte=float(give_point_lte))
+            except ValueError:
+                return Response({'error': 'give_point must be float'}, status=status.HTTP_400_BAD_REQUEST)
         if restaurant_id:
             try:
                 restaurant = Restaurant.objects.get(id=int(restaurant_id))
             except Restaurant.DoesNotExist:
                 return Response({'error': f'Restaurant with id {restaurant_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            except ValueError:
+                return Response({'error': f'Restaurant_id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
             queryset = queryset.filter(Restaurant=restaurant)
-        return queryset
+        if user_id:
+            try:
+                user = User.objects.get(id=int(user_id))
+            except Restaurant.DoesNotExist:
+                return Response({'error': f'User with id {user_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            except ValueError:
+                return Response({'error': f'User_id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(user=user)
+        return Response({'comment': CommentSerializer(queryset, many=True).data}, status=status.HTTP_200_OK)
     
     def create(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
@@ -361,21 +382,28 @@ class CommentView(generics.ListCreateAPIView):
             return Response({'error': 'Restaurant id required.'}, status=status.HTTP_400_BAD_REQUEST)
         if not give_point:
             return Response({'error': 'Point required.'}, status=status.HTTP_400_BAD_REQUEST)
-        give_point = float(give_point)
+        try:
+            give_point = float(give_point)
+        except ValueError:
+            return Response({'error': f'Give_point must be float.'}, status=status.HTTP_400_BAD_REQUEST)
         if give_point < 0 or give_point > 5:
             return Response({'error': 'Point must be between 0 to 5'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             restaurant = Restaurant.objects.get(id=int(restaurant_id))
         except Restaurant.DoesNotExist:
             return Response({'error': f'Restaurant with id {restaurant_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError:
+            return Response({'error': f'Restaurant_id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             food = Food.objects.get(id=int(food_id))
         except Food.DoesNotExist:
             return Response({'error': f'Food with id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError:
+            return Response({'error': f'Food_id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
         comment = Comment.objects.create(
             user = request.user,
             food = food,
-            Restaurant = restaurant,
+            restaurant = restaurant,
             comment = comment,
             give_point = give_point
         )
@@ -385,4 +413,31 @@ class CommentView(generics.ListCreateAPIView):
         food.save()
         return Response({'comment': CommentSerializer(comment).data, 'message': 'success'}, status=status.HTTP_201_CREATED)
         
-        
+class SingleCommentView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = CommentSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Comment.objects.all()
+
+    def update(self, request, *args, **kwargs):
+        comment_object = self.get_object()
+        if request.user != comment_object.user:
+            return Response({'error': 'Only writer can edit.'}, status=status.HTTP_403_FORBIDDEN)
+        comment = request.data.get('comment', None)
+        if comment:
+            comment_object.comment = comment
+            comment_object.save()
+        return Response({'comment': CommentSerializer(comment_object).data}, status=status.HTTP_200_OK)
+    
+    def delete(self, request, *args, **kwargs):
+        comment = self.get_object()
+        food = comment.food
+        give_point = float(comment.give_point)
+        if not request.user.is_superuser and (request.user != comment.user) :
+            return Response({'error': 'Only superuser or writer can delete restaurants.'}, status=status.HTTP_403_FORBIDDEN)
+        no_of_comment = food.no_of_comment
+        food.ave_point = (float(food.ave_point)*no_of_comment - give_point)/(no_of_comment-1)
+        food.no_of_comment = no_of_comment - 1
+        food.save()
+        return super().delete(request, *args, **kwargs)
+
+

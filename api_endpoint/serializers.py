@@ -68,6 +68,10 @@ class OrderSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     food = FoodByOrderSerializer()
+    user = serializers.PrimaryKeyRelatedField(
+        queryset = User.objects.all(),
+        default = serializers.CurrentUserDefault()
+    )
     class Meta:
         model = Comment
         fields = '__all__'
