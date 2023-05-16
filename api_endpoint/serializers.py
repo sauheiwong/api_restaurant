@@ -17,6 +17,7 @@ class TableSerializer(serializers.ModelSerializer):
     class Meta:
         model = Table
         fields = '__all__'
+        # exclude = ['max_no']
 
 class RestaurantSerializer(serializers.ModelSerializer):
     own_by = TableSerializer(many=True, read_only=True)

@@ -39,29 +39,64 @@ class SingleRestaurantView(generics.RetrieveUpdateDestroyAPIView):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can edit restaurants.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
+    
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can delete restaurants.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
 
 class TableView(generics.ListCreateAPIView):
     serializer_class = TableSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        max_no_query = self.request.data.get('max_no', None)
-        restaurant_query = self.request.data.get('restaurant_id', None)
-        location_query = self.request.data.get('location', None)
-        available = self.request.data.get('available', True)
+    def list(self, request):
+        max_no_query = request.data.get('max_no', None)
+        restaurant_query = request.data.get('restaurant_id', None)
+        location_query = request.data.get('location', None)
+        available = request.data.get('available', True)
         queryset = Table.objects.filter(available=available)
         if max_no_query:
-            queryset = queryset.filter(max_no__gte=int(max_no_query))
+            try:
+                max_no = int(max_no_query)
+            except ValueError:
+                return Response({'error': 'max_no must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(max_no__gte=max_no)
         if restaurant_query:
-            queryset = queryset.filter(restaurant_id=restaurant_query)
+            try:
+                restaurant_id = int(restaurant_query)
+            except ValueError:
+                return Response({'error': 'restaurant id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(restaurant_id=restaurant_id)
         if location_query:
             queryset = queryset.filter(restaurant__location__icontains=location_query)
-        return queryset
+        return Response({'table': TableSerializer(queryset, many=True).data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can create table.'}, status=status.HTTP_403_FORBIDDEN)
-        return super().create(request, *args, **kwargs)
+        max_no = request.data.get('max_no', None)
+        restaurant_id = request.data.get('restaurant_id', None)
+        if not max_no:
+            return Response({'error': 'max_no is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            max_no = int(max_no)
+        except ValueError:
+            return Response({'error': 'max_no must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not restaurant_id:
+            return Response({'error': 'restaurant id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            restaurant_id = int(restaurant_id)
+        except ValueError:
+            return Response({'error': 'restaurant_id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            restaurant = Restaurant.objects.get(id=restaurant_id)
+        except Restaurant.DoesNotExist:
+            return Response({'error': f'restaurant with id {restaurant_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        table = Table.objects.create(
+            max_no = max_no,
+            restaurant = restaurant
+        )
+        return Response({'table': TableSerializer(table).data, 'message': 'success'}, status=status.HTTP_201_CREATED)
 
 class SingleTableView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Table.objects.all()
@@ -72,6 +107,11 @@ class SingleTableView(generics.RetrieveUpdateDestroyAPIView):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can edit tables.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
+    
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can delete restaurants.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
 
 class TypeView(generics.ListCreateAPIView):
     serializer_class = TypeSerializer
@@ -98,32 +138,57 @@ class SingleTypeView(generics.RetrieveUpdateDestroyAPIView):
         if not request.user.is_superuser:
             return Response({'error': 'Only superuser can edit types.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
+    
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can delete types.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
 
 class FoodView(generics.ListCreateAPIView):
     serializer_class = FoodSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def list(self, request):
         queryset = Food.objects.all()
-        name_query = self.request.data.get('name', None)
-        price_lte = self.request.data.get('price_lte', None)
-        price_gte = self.request.data.get('price_gte', None)
-        point_lte = self.request.data.get('point_lte', None)
-        point_gte = self.request.data.get('point_gte', None)
-        type_id = self.request.data.get('type_id', None)
+        name_query = request.data.get('name', None)
+        price_lte = request.data.get('price_lte', None)
+        price_gte = request.data.get('price_gte', None)
+        point_lte = request.data.get('point_lte', None)
+        point_gte = request.data.get('point_gte', None)
+        type_id = request.data.get('type_id', None)
         if name_query:
             queryset = queryset.filter(Q(chinese_name__icontains=name_query)|Q(english_name__icontains=name_query))
         if price_gte:
-            queryset = queryset.filter(price__gte=int(price_gte))
+            try:
+                price_gte = float(price_gte)
+            except ValueError:
+                return Response({'error': 'price must be float'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(price__gte=price_gte)
         if price_lte:
-            queryset = queryset.filter(price__lte=int(price_lte))
+            try:
+                price_lte = float(price_lte)
+            except ValueError:
+                return Response({'error': 'price must be float'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(price__lte=price_lte)
         if point_gte:
-            queryset = queryset.filter(ave_point__gte=int(point_gte))
+            try:
+                point_gte = float(point_gte)
+            except ValueError:
+                return Response({'error': 'point must be float'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(ave_point__gte=point_gte)
         if point_lte:
-            queryset = queryset.filter(ave_point__lte=int(point_lte))
+            try:
+                point_lte = float(point_lte)
+            except ValueError:
+                return Response({'error': 'point must be float'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(ave_point__gte=point_lte)
         if type_id:
-            queryset = queryset.filter(type_id=int(type_id))
-        return queryset
+            try:
+                type_id = int(type_id)
+            except ValueError:
+                return Response({'error': 'type id must be int'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(type_id=type_id)
+        return Response({'food': FoodSerializer(queryset, many=True).data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_superuser:
