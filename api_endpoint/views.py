@@ -280,7 +280,7 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
         order = self.get_object()
         order.complete = True
         order.save()
-        return Response({'message': f'Order is completed. Total price is ${order.total_price}'}, status=status.HTTP_200_OK)
+        return Response({'message': f'Order is completed. Total price is ${order.total_price}', 'order': OrderSerializer(order).data}, status=status.HTTP_200_OK)
 
 class OrderFoodView(APIView):
     queryset = Order.objects.all()
@@ -288,14 +288,20 @@ class OrderFoodView(APIView):
         
     def post(self, request):
         food_id = request.data.get('food_id', None)
-        number = int(request.data.get('number', 1))
+        number = request.data.get('number', 1)
         order_id = request.data.get('order_id', None)
+        try:
+            number = int(number)
+        except ValueError:
+            return Response({'error': f'Number must be int.'}, status=status.HTTP_400_BAD_REQUEST)
         if not order_id:
             return Response({'error': 'Order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             order = Order.objects.get(id=int(order_id))
         except Order.DoesNotExist:
             return Response({'error': 'Order does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError:
+            return Response({'error': f'Order id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
         if order.user != request.user:
             return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
         if order.complete:
@@ -306,6 +312,8 @@ class OrderFoodView(APIView):
             food = Food.objects.get(id=int(food_id))
         except Food.DoesNotExist:
             return Response({'error': f'Food id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError:
+            return Response({'error': f'Food id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
         ordered_food = order.get_ordered_food()
         ordered_food.append(
             {
