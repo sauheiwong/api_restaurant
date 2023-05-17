@@ -377,11 +377,11 @@ class CommentView(generics.ListCreateAPIView):
         restaurant_id = self.request.data.get('restaurant_id', None)
         comment = self.request.data.get('comment', None)
         if not food_id:
-            return Response({'error': 'Food id required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Food id is required.'}, status=status.HTTP_400_BAD_REQUEST)
         if not restaurant_id:
-            return Response({'error': 'Restaurant id required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Restaurant id is required.'}, status=status.HTTP_400_BAD_REQUEST)
         if not give_point:
-            return Response({'error': 'Point required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Point is required.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             give_point = float(give_point)
         except ValueError:
@@ -440,4 +440,22 @@ class SingleCommentView(generics.RetrieveUpdateDestroyAPIView):
         food.save()
         return super().delete(request, *args, **kwargs)
 
+class UnavailableView(generics.ListCreateAPIView):
+    queryset = Unavailable.objects.all()
+    serializer_class = UnavailableSerializer
+    permission_classes = [IsAuthenticated]
 
+    def create(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can create.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+class SingleUnavailableView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Unavailable.objects.all()
+    serializer_class = UnavailableSerializer
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'error': 'Only superuser can delete.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)

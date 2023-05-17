@@ -22,4 +22,7 @@ urlpatterns = [
 
     path('comment', views.CommentView.as_view()),
     path('comment/<int:pk>', views.SingleCommentView.as_view()),
+
+    path('unavailable', views.UnavailableView.as_view()),
+    path('unavailable/<int:pk>', views.SingleUnavailableView.as_view()),
 ]

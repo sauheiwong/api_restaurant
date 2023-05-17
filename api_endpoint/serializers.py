@@ -75,3 +75,11 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = '__all__'
+
+class UnavailableSerializer(serializers.ModelSerializer):
+    food = FoodByTypeSerializer
+    restaurant = RestaurantSerializer
+
+    class Meta:
+        model = Unavailable
+        fields = '__all__'
