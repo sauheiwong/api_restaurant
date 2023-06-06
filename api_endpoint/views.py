@@ -251,7 +251,7 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
         if request.user != order.user and not request.user.is_superuser:
             return Response({'error': 'Only superuser can view orders.'}, status=status.HTTP_403_FORBIDDEN)
         ordered_food = []
-        for food in order.get_ordered_food():
+        for food in order.get_ordered_food().values():
             food_infor = Food.objects.get(id=food['id'])
             ordered_food.append(
                 {
@@ -294,6 +294,7 @@ class OrderFoodView(APIView):
             number = int(number)
         except ValueError:
             return Response({'error': f'Number must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         if not order_id:
             return Response({'error': 'Order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -306,6 +307,7 @@ class OrderFoodView(APIView):
             return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
         if order.complete:
             return Response({'error': 'This order has been paid. Please create a new order.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         if not food_id:
             return Response({'error': 'food id miss.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -314,19 +316,55 @@ class OrderFoodView(APIView):
             return Response({'error': f'Food id {food_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
         except ValueError:
             return Response({'error': f'Food id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         if Unavailable.objects.filter(food=food, restaurant=order.table.restaurant).exists():
             return Response({'error': f'Sorry, {food.chinese_name}/{food.english_name} is not available in {order.table.restaurant.name} now.'}, status=status.HTTP_404_NOT_FOUND)
+        
         ordered_food = order.get_ordered_food()
-        ordered_food.append(
-            {
-                'id': food.id,
-                'number': number
-            }
-        )
-        order.set_ordered_list(ordered_food)
+        if len(ordered_food) == 0:
+            no_ordered_food = 0
+        else:
+            no_ordered_food = max(ordered_food)+1
+        ordered_food[no_ordered_food] = {
+            'id': food.id,
+            'number': number,
+            'price': float(food.price*number)
+        }
+        print(ordered_food)
+        order.set_ordered_dict(ordered_food)
         order.total_price += food.price*number
         order.save()
         return Response({'message': 'success', 'ordered_food': FoodSerializer(food).data, 'number': number}, status=status.HTTP_202_ACCEPTED)
+    
+    def delete(self, request):
+        order_no = request.data.get('order_no', None)
+        order_id = request.data.get('order_id', None)
+        if not order_no:
+            return Response({'error': 'Order no miss.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            order_no = int(order_no)
+        except ValueError:
+            return Response({'error': f'Order no must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not order_id:
+            return Response({'error': 'Order id miss.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            order = Order.objects.get(id=int(order_id))
+        except Order.DoesNotExist:
+            return Response({'error': 'Order does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError:
+            return Response({'error': f'Order id must be int.'}, status=status.HTTP_400_BAD_REQUEST)
+        if order.user != request.user:
+            return Response({'error': 'This order is not yours.'}, status=status.HTTP_403_FORBIDDEN)
+        if order.complete:
+            return Response({'error': 'This order has been paid. Please create a new order.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        ordered_food = order.get_ordered_food()
+        deleted_ordered_food = ordered_food.pop(order_no)
+        order.set_ordered_dict(ordered_food)
+        order.total_price -= deleted_ordered_food['price']
+
+        return Response({'message': 'success', 'order': OrderSerializer(ordered_food).data}, status=status.HTTP_202_ACCEPTED)
 
 class CommentView(generics.ListCreateAPIView):
     serializer_class = CommentSerializer

@@ -56,12 +56,12 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def set_ordered_list(self, value):
+    def set_ordered_dict(self, value):
         self.ordered_food = json.dumps(value)
 
     def get_ordered_food(self):
         if not self.ordered_food:
-            return []
+            return {}
         return json.loads(self.ordered_food)
 
     def __str__(self) -> str:
